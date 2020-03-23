@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+# Stop proxy
+#
+
+echo ""
+readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep 8001 | wc -l)
+if (( ${PS_COUNT} == 0 )); then echo "Proxy not started..."; echo ""; exit 0; fi 
+echo "Stopping proxy..."
+sudo pkill kubectl > /dev/null 2>&1
+if (( $? )); then echo "Failed to stop proxy"; echo ""; exit 1; fi 
+echo "Successfully stopped proxy"
+echo ""
+
+#::END:: 

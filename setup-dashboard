@@ -1,0 +1,70 @@
+#!/bin/bash
+#
+# Setup dashboard & generate dashboard login "kubeconfig" file
+# 
+
+readonly DASHBOARD_RELEASE_TAG=v2.0.0-rc6
+readonly SVC_ACCOUNT=admin
+ 
+# Dashboard setup YAML file URL & kubeconfig file
+readonly DASHBOARD_SETUP_YAML_URL="https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_RELEASE_TAG}/aio/deploy/recommended.yaml"
+readonly KUBECONFIG_FILE="${SVC_ACCOUNT}.kubeconfig"
+
+function abort
+{
+	echo ${1}
+	echo "Aborting..."
+	echo ""
+	exit 1
+}
+
+# Set up dashboard
+echo ""
+echo "Setting up dashboard..."
+kubectl apply -f ${DASHBOARD_SETUP_YAML_URL}
+if (( $? )); then abort  "Failed to setup dashboard"; fi
+sleep 3
+
+# Create service account in default namespace with cluster admin role (for ease of use)
+echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
+kubectl create serviceaccount ${SVC_ACCOUNT} -n default
+if (( $? )); then abort  "Failed to create service account"; fi
+sleep 2
+kubectl create clusterrolebinding dashboard-admin -n default --clusterrole=cluster-admin --serviceaccount=default:${SVC_ACCOUNT}
+if (( $? )); then abort  "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"; fi
+sleep 2
+
+# Generate dashboard login "kubeconfig" file
+echo "Generating dashboard login kubeconfig file: ${KUBECONFIG_FILE} ..."
+SVC_ACCOUNT_SECRET_NAME=$(kubectl get serviceaccount ${SVC_ACCOUNT} -n default -o jsonpath='{.secrets[0].name}')
+if (( $? )); then abort  "Failed to get service account secret key name"; fi
+CA=$(kubectl get secret ${SVC_ACCOUNT_SECRET_NAME} -n default -o jsonpath='{.data.ca\.crt}')
+if (( $? )); then abort  "Failed to get service account certificate authority"; fi
+TOKEN=$(kubectl get secret ${SVC_ACCOUNT_SECRET_NAME} -n default -o jsonpath='{.data.token}' | base64 --decode)
+if (( $? )); then abort  "Failed to get service account secret token"; fi
+
+cat <<-EOF > ${KUBECONFIG_FILE}
+	apiVersion: v1
+	kind: Config
+	clusters:
+	  - name: default-cluster
+	    cluster:
+	      certificate-authority-data: ${CA}
+	contexts:
+	  - name: default-context
+	    context:
+	      cluster: default-cluster
+	      namespace: default
+	      user: default-user
+	current-context: default-context
+	users:
+	  - name: default-user
+	    user:
+	      token: ${TOKEN}
+	EOF
+
+if (( $? )); then abort  "Failed to create kubeconfig file: ${KUBECONFIG_FILE}"; fi
+echo "Succesfully setup kubernetes dashbaord & created kubeconfig file: ${KUBECONFIG_FILE}"
+echo ""
+
+#::END:: 

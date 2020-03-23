@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# Remove Kubernetes cluster created using "kind"
+#
+
+echo ""
+echo "Removing kubernetes cluster..."
+kind delete cluster
+if (( $? )); then echo "Failed to remove cluster"; echo ""; exit 1; fi
+echo "Kubernetes cluster removed"
+echo ""
+
+#::END::
