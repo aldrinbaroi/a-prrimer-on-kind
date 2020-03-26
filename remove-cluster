@@ -3,11 +3,31 @@
 # Remove Kubernetes cluster created using "kind"
 #
 
+clusterName=${1}
+CLUSTER_NAME="" 
+
 echo ""
+if [ -z "${clusterName}" ]; then 
+	echo "Plase specify the name of the cluster to delete"
+	echo ""
+	exit 0
+else
+	CLUSTER_NAME="--name=${clusterName}"
+fi
 echo "Removing kubernetes cluster..."
-kind delete cluster
-if (( $? )); then echo "Failed to remove cluster"; echo ""; exit 1; fi
-echo "Kubernetes cluster removed"
+clustersList=($(kind get clusters))
+clustersCount=${#clustersList[@]}
+if [ $clustersCount > 0 ]; then 
+	if [[ " ${clustersList[@]} " =~ " ${clusterName} " ]]; then
+		kind delete cluster ${CLUSTER_NAME} 
+		if (( $? )); then echo "Failed to remove cluster"; echo ""; exit 1; fi
+		echo "Kubernetes cluster removed"
+	else
+		echo "Cluster ${clusterName} doesn't exist."
+	fi 
+else
+	"No clusters exist."
+fi
 echo ""
 
 #::END::
