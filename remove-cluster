@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Remove Kubernetes cluster created using "kind"
+# Delete Kubernetes cluster created using "kind"
 #
 
 source utils.sh
