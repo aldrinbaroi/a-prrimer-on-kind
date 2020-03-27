@@ -3,31 +3,44 @@
 # Remove Kubernetes cluster created using "kind"
 #
 
-clusterName=${1}
-CLUSTER_NAME="" 
+source utils.sh
 
 echo ""
-if [ -z "${clusterName}" ]; then 
-	echo "Plase specify the name of the cluster to delete"
+while getopts "n:h" opt ${@}; do
+        case ${opt} in
+                n)
+                        clusterName=${OPTARG}
+                        ;;
+                h)
+                        echo "Usage: "
+                        echo "        delete-cluster [-n cluster-name]"
+                        echo ""
+                        echo "        If cluster name is not provided then default kind cluster is delete"
+                        echo ""
+                        exit 0
+                        ;;
+        esac
+done
+
+readonly CLUSTER_NAME=${clusterName:-kind}
+
+echo "Deleting [${CLUSTER_NAME}] cluster..."
+if ( isClusterExist ${CLUSTER_NAME} ); then
+	read -p "Are you sure you want to delete [${CLUSTER_NAME}] cluster? [Y/N] " -n1 userResponse
 	echo ""
-	exit 0
-else
-	CLUSTER_NAME="--name=${clusterName}"
-fi
-echo "Removing kubernetes cluster..."
-clustersList=($(kind get clusters))
-clustersCount=${#clustersList[@]}
-if [ $clustersCount > 0 ]; then 
-	if [[ " ${clustersList[@]} " =~ " ${clusterName} " ]]; then
+	if [[ "${userResponse,,}" == "y" ]]; then
 		kind delete cluster ${CLUSTER_NAME} 
-		if (( $? )); then echo "Failed to remove cluster"; echo ""; exit 1; fi
-		echo "Kubernetes cluster removed"
+		if (( $? )); then 
+			echo "Failed to delete cluster"
+		else 
+			echo "Deleted the cluster"
+		fi
 	else
-		echo "Cluster ${clusterName} doesn't exist."
-	fi 
+		echo "Not deleting the cluster."
+	fi
 else
-	"No clusters exist."
-fi
+	echo "[${CLUSTER_NAME}] cluster doesn't exist."
+fi 
 echo ""
 
 #::END::
