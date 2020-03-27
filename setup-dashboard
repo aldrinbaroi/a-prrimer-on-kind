@@ -3,34 +3,62 @@
 # Setup dashboard & generate dashboard login "kubeconfig" file
 # 
 
-readonly DASHBOARD_RELEASE_TAG=v2.0.0-rc6
-readonly SVC_ACCOUNT=admin
- 
-# Dashboard setup YAML file URL & kubeconfig file
-readonly DASHBOARD_SETUP_YAML_URL="https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_RELEASE_TAG}/aio/deploy/recommended.yaml"
-readonly KUBECONFIG_FILE="${SVC_ACCOUNT}.kubeconfig"
+source utils.sh
+source dashboard.config
 
-function abort
-{
-	echo ${1}
-	echo "Aborting..."
-	echo ""
-	exit 1
-}
+svcAccount=""
+clusterName=""
+
+echo ""
+while getopts "s:n:h" opt ${@}; do
+	case ${opt} in
+		s)
+			svcAccount=${OPTARG}
+			;; 
+		n)
+			clusterName=${OPTARG}
+			;; 
+		h)
+			echo "Usage: "
+                        echo "        setup-dashboard [-s service-account-name] [-n cluster-name]"
+			echo ""
+			echo "        If no options are provided then dashboard is setup in default [kind] cluster"
+			echo "        with service account [dashboard-admin]"
+			echo ""
+			exit 0
+			;; 
+	esac
+done
+
+readonly SVC_ACCOUNT=${svcAccount:-dashboard-admin}
+readonly CLUSTER_NAME=${clusterName:-kind}
+readonly CTX_NAME="kind-${clusterName:-kind}"
+readonly KUBECONFIG_FILE="${CTX_NAME}.kubeconfig" 
 
 # Set up dashboard
 echo ""
 echo "Setting up dashboard..."
-kubectl apply -f ${DASHBOARD_SETUP_YAML_URL}
+echo ""
+echo "  Cluster name             : ${CLUSTER_NAME}"
+echo "  Cluster context          : ${CTX_NAME}"
+echo "  Dashboard service account: ${SVC_ACCOUNT}"
+echo "  Kube config file         : ${KUBECONFIG_FILE}" 
+echo "" 
+
+if ( ! $(isClusterExist ${CLUSTER_NAME}) ); then
+	abort "Cannot setup dashboard. [${CLUSTER_NAME}] cluster is not setup."
+fi
+kubectl config use-context ${CTX_NAME} 
+kubectl apply -f ${DASHBOARD_SETUP_YAML_URL} 
 if (( $? )); then abort  "Failed to setup dashboard"; fi
 sleep 3
 
 # Create service account in default namespace with cluster admin role (for ease of use)
 echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
-kubectl create serviceaccount ${SVC_ACCOUNT} -n default
+kubectl create serviceaccount ${SVC_ACCOUNT} -n default 
 if (( $? )); then abort  "Failed to create service account"; fi
 sleep 2
-kubectl create clusterrolebinding dashboard-admin -n default --clusterrole=cluster-admin --serviceaccount=default:${SVC_ACCOUNT}
+kubectl create clusterrolebinding dashboard-admin -n default --clusterrole=cluster-admin --serviceaccount=default:${SVC_ACCOUNT} 
 if (( $? )); then abort  "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"; fi
 sleep 2
 
@@ -47,18 +75,18 @@ cat <<-EOF > ${KUBECONFIG_FILE}
 	apiVersion: v1
 	kind: Config
 	clusters:
-	  - name: default-cluster
+	  - name: ${CTX_NAME}
 	    cluster:
 	      certificate-authority-data: ${CA}
 	contexts:
-	  - name: default-context
+	  - name: ${CTX_NAME}
 	    context:
-	      cluster: default-cluster
+	      cluster: ${CTX_NAME}
 	      namespace: default
-	      user: default-user
-	current-context: default-context
+	      user: ${CTX_NAME}
+	current-context: ${CTX_NAME}
 	users:
-	  - name: default-user
+	  - name: ${CTX_NAME}
 	    user:
 	      token: ${TOKEN}
 	EOF
