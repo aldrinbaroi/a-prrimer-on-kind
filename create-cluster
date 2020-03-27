@@ -3,9 +3,43 @@
 # Create Kubernetes cluster using "kind" and custom config file
 #
 
+configFile=""
+clusterName="" 
+CONFIG_FILE=""
+CLUSTER_NAME=""
+
 echo ""
+while getopts "c:n:h" opt ${@}; do
+	case ${opt} in
+		c)
+			configFile=${OPTARG}
+			if [ ! -z "${configFile}" ] && [ ! -f ${configFile} ]; then 
+				echo "Config file [${configFile}] doesn't exist. aborting..."; 
+				echo ""
+				exit 1; 
+			else
+				CONFIG_FILE="--config=${configFile}"
+			fi
+			;; 
+		n)
+			clusterName=${OPTARG}
+			if [ ! -z "${clusterName}" ]; then 
+				CLUSTER_NAME="--name=${clusterName}"
+			fi
+			;; 
+		h)
+			echo "Usage: "
+                        echo "        create-cluster [-c config-YAML-file] [-n cluster-name]"
+			echo ""
+			echo "        If no options are provided then default kind cluster is created"
+			echo ""
+			exit 0
+			;; 
+	esac
+done
 echo "Creating cluster..."
-kind create cluster --config=cluster.yaml
+echo kind create cluster ${CONFIG_FILE} ${CLUSTER_NAME}
+     kind create cluster ${CONFIG_FILE} ${CLUSTER_NAME}
 if (( $? )); then echo "Failed to create cluster"; echo ""; exit 1; fi
 echo "Successfuly created cluster"
 echo ""
