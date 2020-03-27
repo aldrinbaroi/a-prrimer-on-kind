@@ -1,5 +1,5 @@
 # kind-utils
-## Contains utility scripts to make working with "kind" (Kubernetes in Docker) convenient
+### Contains utility scripts to make working with "kind" (Kubernetes in Docker) convenient
 
 Kind repository: https://github.com/kubernetes-sigs/kind<br/>
 Kind documentation: https://kind.sigs.k8s.io/docs/user/quick-start/
