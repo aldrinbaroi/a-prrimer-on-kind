@@ -1,18 +1,57 @@
 #!/bin/bash
 #
 # Start proxy
-#
+# 
 
-readonly PROXY_PORT=8001
+source utils.sh
+source config/proxy.conf
+
+readonly DEFAULT_PORT=8001
 
 echo ""
-readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep 8001 | wc -l)
-if (( ${PS_COUNT} > 0 )); then echo "Proxy already running..."; echo ""; exit 0; fi
+while getopts "n:p:h" opt ${@}; do
+        case ${opt} in
+                n)
+                        clusterName=${OPTARG}
+                        ;;
+                p)
+                        proxyPort=${OPTARG}
+                        ;;
+                h)
+                        echo "Usage: "
+                        echo "        start-proxy [-n cluster-name] [-p proxy-port]"
+                        echo ""
+                        echo "        The default values are:"
+                        echo "        Cluster name  : kind"
+                        echo "        Proxy port    : ${DEFAULT_PORT}"
+                        echo ""
+                        exit 0
+                        ;;
+        esac
+done
 
+readonly CLUSTER_NAME=${clusterName:-kind}
+readonly CTX_NAME="kind-${clusterName:-kind}"
+readonly PROXY_PORT=${proxyPort:-${DEFAULT_PORT}}
+readonly PROXY_DATA_FILE=${DATA_DIR}/${CTX_NAME}
+
+echo "Starting proxy..."
+if [ ! -d ${DATA_DIR} ]; then
+	mkdir -p ${DATA_DIR}
+	if (( $? )); then
+		abort "Failed to create data directory [${DATA_DIR}] to store running proxy server's port number"
+	fi
+fi 
+readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT} | wc -l)
+if (( ${PS_COUNT} > 0 )); then 
+	abort "Proxy already running..."
+fi 
+echo "Setting current context to [${CTX_NAME}]..."
+kubectl config use-context ${CTX_NAME}
 echo "Starting proxy on port ${PROXY_PORT}..."
 kubectl proxy --port=${PROXY_PORT} > /dev/null 2>&1 &
 if (( $? )); then echo "Failed to start proxy"; echo ""; exit 1; fi
-
+echo ${PROXY_PORT} > ${PROXY_DATA_FILE} 
 echo "Proxy started on port ${PROXY_PORT}"
 echo "You can access the Kubernetes dashboard at the following URL:"
 echo "http://localhost:${PROXY_PORT}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy"
