@@ -4,7 +4,7 @@
 # 
 
 source utils.sh
-source dashboard.config
+source config/dashboard.conf
 
 svcAccount=""
 clusterName=""
@@ -33,7 +33,7 @@ done
 readonly SVC_ACCOUNT=${svcAccount:-dashboard-admin}
 readonly CLUSTER_NAME=${clusterName:-kind}
 readonly CTX_NAME="kind-${clusterName:-kind}"
-readonly KUBECONFIG_FILE="${CTX_NAME}.kubeconfig" 
+readonly KUBECONFIG_FILE="${KUBECONFIG_DIR}/${CTX_NAME}.kubeconfig" 
 
 # Set up dashboard
 echo ""
@@ -44,7 +44,9 @@ echo "  Cluster context          : ${CTX_NAME}"
 echo "  Dashboard service account: ${SVC_ACCOUNT}"
 echo "  Kube config file         : ${KUBECONFIG_FILE}" 
 echo "" 
-
+if ( ! $(createDirectory ${KUBECONFIG_DIR}) ); then
+	abort "Failed to create kubeconfig directory [${KUBECONFIG_DIR}] to store kubeconfig files"
+fi 
 if ( ! $(isClusterExist ${CLUSTER_NAME}) ); then
 	abort "Cannot setup dashboard. [${CLUSTER_NAME}] cluster is not setup."
 fi
