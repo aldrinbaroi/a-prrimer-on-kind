@@ -14,8 +14,8 @@ function abort
 function isClusterExist 
 {
 	local clusterName=${1}
-	clustersList=($(kind get clusters 2> /dev/null))
-	clustersCount=${#clustersList[@]}
+	local clustersList=($(kind get clusters 2> /dev/null))
+	local clustersCount=${#clustersList[@]}
 	if [ $clustersCount > 0 ] && [[ " ${clustersList[@]} " =~ " ${clusterName} " ]]; then
 		exit 0
 	else
