@@ -23,4 +23,17 @@ function isClusterExist
 	fi 
 }
 
+function createDirectory 
+{
+	local dirName=${1}
+	if [ ! -d ${dirName} ]; then
+		mkdir -p ${dirName}
+		if (( $? )); then
+			exit 1
+		else
+			exit 0
+		fi
+	fi 
+}
+
 #::END::
