@@ -29,7 +29,11 @@ if ( isClusterExist ${CLUSTER_NAME} ); then
 	read -p "Are you sure you want to delete [${CLUSTER_NAME}] cluster? [Y/N] " -n1 userResponse
 	echo ""
 	if [[ "${userResponse,,}" == "y" ]]; then
-		kind delete cluster ${CLUSTER_NAME} 
+		if [[ "${CLUSTER_NAME}" == "kind" ]]; then
+			kind delete cluster
+		else
+			kind delete cluster ${CLUSTER_NAME} 
+		fi
 		if (( $? )); then 
 			echo "Failed to delete cluster"
 		else 
