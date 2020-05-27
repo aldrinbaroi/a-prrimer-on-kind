@@ -35,13 +35,13 @@ done
 
 readonly CLUSTER_NAME=${clusterName:-kind}
 readonly CTX_NAME="kind-${clusterName:-kind}"
-readonly PROXY_DATA_FILE=${DATA_DIR}/${CTX_NAME}
+readonly PROXY_PORT_FILE=${DATA_DIR}/${CTX_NAME}
 
 echo "Stopping proxy for [${CLUSTER_NAME}] cluster..."
-if [ ! -f ${PROXY_DATA_FILE} ]; then
-	abort "Unable to locate proxy data file [${PROXY_DATA_FILE}] for [${CLUSTER_NAME}] cluster"
+if [ ! -f ${PROXY_PORT_FILE} ]; then
+	abort "Unable to locate proxy data file [${PROXY_PORT_FILE}] for [${CLUSTER_NAME}] cluster"
 fi
-source ${PROXY_DATA_FILE} 
+source ${PROXY_PORT_FILE} 
 readonly checkData=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT})
 if (( $(getProcessCount ${checkData}) == 0 )); then 
 	abort "Proxy not running..."; 

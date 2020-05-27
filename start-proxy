@@ -6,8 +6,6 @@
 source utils.sh
 source config/proxy.conf
 
-readonly DEFAULT_PORT=8001
-
 echo ""
 while getopts "n:p:h" opt ${@}; do
         case ${opt} in
@@ -23,20 +21,20 @@ while getopts "n:p:h" opt ${@}; do
                         echo ""
                         echo "        The default values are:"
                         echo "        Cluster name  : kind"
-                        echo "        Proxy port    : ${DEFAULT_PORT}"
+                        echo "        Proxy port    : RANDOM PORT"
                         echo ""
                         exit 0
                         ;;
         esac
 done
 
-readonly CLUSTER_NAME=${clusterName:-kind}
+readonly CLUSTER_NAME="${clusterName:-kind}"
 readonly CTX_NAME="kind-${clusterName:-kind}"
-readonly PROXY_PORT=${proxyPort:-${DEFAULT_PORT}}
-readonly PROXY_DATA_FILE=${DATA_DIR}/${CTX_NAME}
+readonly PROXY_PORT_FILE="${DATA_DIR}/${CTX_NAME}"
+readonly PROXY_STATUS_FILE="${DATA_DIR}/${CTX_NAME}-status"
 
 echo "Starting proxy..."
-if ! ( isClusterExist ${CLUSTER_NAME} ); then
+if ! ( isClusterExist ${CLUSTER_NAME} ); then 
         abort "Cannot create proxy. [${CLUSTER_NAME}] cluster doesn't exists."
 fi 
 if [ ! -d ${DATA_DIR} ]; then
@@ -45,16 +43,22 @@ if [ ! -d ${DATA_DIR} ]; then
 		abort "Failed to create data directory [${DATA_DIR}] to store running proxy server's port number"
 	fi
 fi 
-readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT} | wc -l)
-if (( ${PS_COUNT} > 0 )); then 
-	abort "Proxy already running..."
-fi 
+if [ -f ${PROXY_PORT_FILE} ]; then
+	source ${PROXY_PORT_FILE}
+	#echo "******* PROXY PORT=[${PROXY_PORT}] ********** "
+	readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT} | wc -l)
+	if (( ${PS_COUNT} > 0 )); then 
+		abort "Proxy already running..."
+	fi 
+fi
+PROXY_PORT="${proxyPort:-0}"
 echo "Setting current context to [${CTX_NAME}]..."
 kubectl config use-context ${CTX_NAME}
-echo "Starting proxy on port ${PROXY_PORT}..."
-kubectl proxy --port=${PROXY_PORT} > /dev/null 2>&1 &
-if (( $? )); then echo "Failed to start proxy"; echo ""; exit 1; fi
-echo "PROXY_PORT=${PROXY_PORT}" > ${PROXY_DATA_FILE} 
+kubectl proxy --port=${PROXY_PORT} > ${PROXY_STATUS_FILE} 2>&1 &
+sleep 3
+if (( $? )); then abort "Failed to start proxy"; fi
+PROXY_PORT=$(cat ${PROXY_STATUS_FILE} | grep -i "starting to serve on" | sed 's/.*://')
+echo "PROXY_PORT=${PROXY_PORT}" > ${PROXY_PORT_FILE} 
 echo "Proxy started on port ${PROXY_PORT}"
 echo "You can access the Kubernetes dashboard at the following URL:"
 echo "http://localhost:${PROXY_PORT}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy"
