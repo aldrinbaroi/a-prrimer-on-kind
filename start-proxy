@@ -6,8 +6,14 @@
 source utils.sh
 source config/proxy.conf
 
+readonly TRUE=1
+readonly FALSE=0
+clusterName=""
+proxyPort=0
+openDashboardInBrowser=${FALSE}
+
 echo ""
-while getopts "n:p:h" opt ${@}; do
+while getopts "n:p:oh" opt ${@}; do
         case ${opt} in
                 n)
                         clusterName=${OPTARG}
@@ -15,13 +21,16 @@ while getopts "n:p:h" opt ${@}; do
                 p)
                         proxyPort=${OPTARG}
                         ;;
+                o)
+                        openDashboardInBrowser=${TRUE}
+                        ;;
                 h)
                         echo "Usage: "
-                        echo "        start-proxy [-n cluster-name] [-p proxy-port]"
+                        echo "    start-proxy [-n cluster-name] [-p proxy-port]"
                         echo ""
-                        echo "        The default values are:"
-                        echo "        Cluster name  : kind"
-                        echo "        Proxy port    : RANDOM PORT"
+                        echo "    The default values are:"
+                        echo "         cluster-name  : kind"
+                        echo "         proxy-port    : RANDOM PORT"
                         echo ""
                         exit 0
                         ;;
@@ -45,7 +54,6 @@ if [ ! -d ${DATA_DIR} ]; then
 fi 
 if [ -f ${PROXY_PORT_FILE} ]; then
 	source ${PROXY_PORT_FILE}
-	#echo "******* PROXY PORT=[${PROXY_PORT}] ********** "
 	readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT} | wc -l)
 	if (( ${PS_COUNT} > 0 )); then 
 		abort "Proxy already running..."
@@ -58,10 +66,13 @@ kubectl proxy --port=${PROXY_PORT} > ${PROXY_STATUS_FILE} 2>&1 &
 sleep 3
 if (( $? )); then abort "Failed to start proxy"; fi
 PROXY_PORT=$(cat ${PROXY_STATUS_FILE} | grep -i "starting to serve on" | sed 's/.*://')
+DASHBOARD_URL="http://localhost:${PROXY_PORT}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy"
 echo "PROXY_PORT=${PROXY_PORT}" > ${PROXY_PORT_FILE} 
 echo "Proxy started on port ${PROXY_PORT}"
 echo "You can access the Kubernetes dashboard at the following URL:"
-echo "http://localhost:${PROXY_PORT}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy"
-echo ""
+echo "${DASHBOARD_URL}"
+echo "Opening dashboard in the browser..."
+xdg-open ${DASHBOARD_URL}
+if (( $? )); then echo "Failed to start proxy"; else echo "Opened the dashboard in the browser"; fi
 
 #::END:: 
