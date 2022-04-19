@@ -1,0 +1,98 @@
+#!/bin/bash
+#
+# Dependency Manager 
+#
+
+readonly TRUE=1
+readonly FALSE=0
+
+[[ -z $__DEBUG_DEP_MANAGER__ ]] && __DEBUG_DEP_MANAGER__=$FALSE
+
+__getFileFromGitRepo()
+{
+	local repoOwner=${1}
+	local repoName=${2}
+	local releaseTag=${3}
+	local fileName=${4}
+	local saveDirectory=${5}
+	local resourceUrl="https://raw.githubusercontent.com/${repoOwner}/${repoName}/${releaseTag}/${fileName}"
+	curl -f -s -o "${saveDirectory}/${fileName}" "${resourceUrl}"
+	if (( $? )); then
+		echo "Failed to get [${fileName}] file from the repository: [github]/${repoOwner}/${repoName}/${releaseTag}/${fileName}"
+		return 1
+	fi
+}
+
+__loadDependencies()
+{
+	local repoOwner
+	local repoName
+	local releaseTag
+	local fileName
+	local saveDirectory="lib"
+	local dependencyRec
+	local dependenciesListFile="dependencies.list"
+	local DEPENDENCIES_LIST_FILE="$dependenciesListFile"
+	[[ ! -f $DEPENDENCIES_LIST_FILE ]] && DEPENDENCIES_LIST_FILE="lib/$dependenciesListFile"
+	if [[ ! -f $DEPENDENCIES_LIST_FILE ]]; then
+		echo "Unable to locate [$dependenciesListFile] in current or lib directory."
+		echo "Aborting..."
+		exit 1
+	fi
+	while IFS= read line || [ -n "${line}" ]; do
+		dependencyRec=(${line//,/ })
+		elementCount=${#dependencyRec[@]}
+		if (( $elementCount == 1 )); then
+			! [[ "${line}" =~ ^([[:print:]]+)$ ]] && continue
+			fileName=${dependencyRec[0]}
+			if [[ -f "${fileName}" || -f "lib/${fileName}" ]]; then
+				(( __DEBUG_DEP_MANAGER__ == $TRUE )) && \
+					echo "Loading dependency: ${fileName}"
+				[[ -f "${fileName}" ]] && source "${fileName}"
+				[[ -f "lib/${fileName}" ]] && source "lib/${fileName}"
+			else
+				echo "Failed to load dependency: ${fileName}."
+				echo "File not found."
+				echo "Aborting..."
+				exit 1 
+			fi
+		elif (( $elementCount == 4 )); then
+			! [[ "${line}" =~ ^([[:print:]]+,){3}[[:print:]]+$ ]] && continue
+			repoOwner=${dependencyRec[0]}
+			repoName=${dependencyRec[1]}
+			releaseTag=${dependencyRec[2]}
+			fileName=${dependencyRec[3]}
+			if [ ! -f "lib/${fileName}" ]; then
+				(( __DEBUG_DEP_MANAGER__ == $TRUE )) && \
+					echo "Downloading dependency: ${fileName}"
+				__getFileFromGitRepo    \
+					"${repoOwner}"  \
+					"${repoName}"   \
+					"${releaseTag}" \
+					"${fileName}"   \
+					"${saveDirectory}"
+				if (( $? )); then
+					echo "Failed to retrieve dependency: ${fileName}."
+					echo "Aborting..."
+					exit 1
+				fi
+			fi
+			(( __DEBUG_DEP_MANAGER__ == $TRUE )) && 
+				echo "Loading dependency: ${fileName}"
+			source "lib/${fileName}"
+		elif (( $elementCount > 0 )) && (( $elementCount != 1 || $elementCount != 4 )) ; then
+			echo "* Invalid dependency definition: $line"
+			continue
+		else
+			continue
+		fi
+	done < $DEPENDENCIES_LIST_FILE
+	if (( $? )); then
+		echo "Error loading dependencies"
+		exit 1
+	fi
+}
+
+__loadDependencies
+
+#::END:: 

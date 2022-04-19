@@ -1,0 +1,55 @@
+#
+# Create Kubernetes cluster using "kind" 
+#
+
+createCluster() {
+configFile=""
+clusterName="" 
+
+echo ""
+while getopts "c:n:h" opt ${@}; do
+	case ${opt} in
+		c)
+			configFile=${OPTARG}
+			;; 
+		n)
+			clusterName=${OPTARG}
+			;; 
+		h)
+			echo "Usage: "
+                        echo "        create-cluster [-c config-YAML-file] [-n cluster-name]"
+			echo ""
+			echo "        If no options are provided then default kind cluster is created"
+			echo ""
+			exit 0
+			;; 
+	esac
+done
+
+if [ ! -z "${configFile}" ] && [ ! -f ${configFile} ]; then 
+	abort "Config file [${configFile}] doesn't exist. aborting..."; 
+fi
+readonly CONFIG_FILE=${configFile}
+readonly CLUSTER_NAME=${clusterName:-kind}
+readonly CTX_NAME="kind-${clusterName:-kind}" 
+echo ""
+echo "Creating cluster..."
+echo ""
+echo "  Cluster name      : ${CLUSTER_NAME}"
+echo "  Cluster context   : ${CTX_NAME}"
+echo "  Configuration file: ${CONFIG_FILE}"
+echo "" 
+if ( isClusterExist ${CLUSTER_NAME} ); then
+	abort "Cannot create.  [${CLUSTER_NAME}] cluster exists."
+fi
+if [ -z "${CONFIG_FILE}" ]; then
+	kind create cluster --name=${CLUSTER_NAME}
+else
+	kind create cluster --config=${CONFIG_FILE} --name=${CLUSTER_NAME}
+fi
+if (( $? )); then echo "Failed to create cluster"; echo ""; exit 1; fi
+echo "Successfuly created cluster"
+echo ""
+}
+
+#::END::

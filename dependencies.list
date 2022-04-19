@@ -1,0 +1,8 @@
+aldrinbaroi,bash-lib,master,bash-lib-logging
+aldrinbaroi,bash-lib,master,bash-lib-execmd
+aldrinbaroi,bash-lib,master,bash-lib-misc
+lib-cluster-create
+lib-cluster-delete
+lib-dashboard-setup
+lib-proxy-start
+lib-proxy-stop
