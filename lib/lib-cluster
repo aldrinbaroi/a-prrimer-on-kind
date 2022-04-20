@@ -1,5 +1,20 @@
 #!/bin/bash
 #
+# 
+# 
+
+isClusterExist() {
+	local clusterName=${1}
+	local clustersList=($(kind get clusters 2> /dev/null))
+	local clustersCount=${#clustersList[@]}
+	if (( $clustersCount > 0 )) && [[ " ${clustersList[@]} " =~ " ${clusterName} " ]]; then
+		exit 0
+	else
+		exit 1
+	fi 
+}
+
+#
 # Create Kubernetes cluster using "kind" 
 #
 
@@ -46,6 +61,48 @@ createCluster() {
 	fi
 	if (( $? )); then echo "Failed to create cluster"; echo ""; exit 1; fi
 	echo "Successfuly created cluster"
+	echo ""
+}
+
+#
+# Delete Kubernetes cluster created using "kind"
+#
+
+deleteCluster() {
+	echo ""
+	while getopts "n:h" opt ${@}; do
+		case ${opt} in
+			n) clusterName=${OPTARG} ;;
+			h)
+				echo "Usage: "
+				echo "        deleteCluster [-n cluster-name]"
+				echo ""
+				echo "        If cluster name is not provided then default kind cluster is deleted"
+				echo ""
+				exit 0
+				;;
+		esac
+	done
+
+	readonly CLUSTER_NAME=${clusterName:-kind}
+
+	echo "Deleting [${CLUSTER_NAME}] cluster..."
+	if ( isClusterExist ${CLUSTER_NAME} ); then
+		read -p "Are you sure you want to delete [${CLUSTER_NAME}] cluster? [Y/N] " -n1 userResponse
+		echo ""
+		if [[ "${userResponse,,}" == "y" ]]; then
+			kind delete cluster --name=${CLUSTER_NAME} 
+			if (( $? )); then 
+				echo "Failed to delete cluster"
+			else 
+				echo "Deleted the cluster"
+			fi
+		else
+			echo "Not deleting the cluster."
+		fi
+	else
+		echo "[${CLUSTER_NAME}] cluster doesn't exist."
+	fi 
 	echo ""
 }
 
