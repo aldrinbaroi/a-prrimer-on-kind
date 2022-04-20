@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "#!/bin/bash" > kindctl
+echo " " >> kindctl 
+for fileName in $(ls lib/*); do
+	cat $fileName | sed -e '/^#!/d' -e '/^source/d' -e '/^#::END::/d' >> kindctl
+done 
+echo " " >> kindctl
+cat main.sh | sed -e '/^#!/d' -e '/^#::END::/d' >> kindctl 
+echo " " >> kindctl
+echo "#::END::" >> kindctl
+
+#::END::
