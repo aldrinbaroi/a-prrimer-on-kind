@@ -14,6 +14,11 @@ case $category in
 			delete) deleteCluster $@ ;;
 		esac
 		;;
+	dashboard)
+		case $command in
+			setup) setupDashboard $@ ;;
+		esac
+		;;
 	proxy)
 		case $command in
 			start) startProxy ;;

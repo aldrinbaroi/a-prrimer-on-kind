@@ -1,22 +1,674 @@
 #!/bin/bash
+ 
+#
+# Bash command exection library with error logging
+#
+# Dependency: bash-lib-logging
+#
+
+
+__initExeCmdLibrary()
+{
+	(( ${__EXECMD_LIB_INITIALIZED__} )) && return
+	readonly __EXECMD_LIB_INITIALIZED__=1
+}
+
+exeCmd()
+{
+
+        local cmd=$1
+        local errorMsg=$2
+        local successMsg=$3 
+        set -e
+        set -o pipefail 
+        if [ -z "${cmd}" ]; then
+                abort "(exeCmd): command not provided"
+        else
+                if [ -z "${errorMsg}" ]; then
+                        errorMsg="Error: Command execution failed. Command: [${cmd//\"/\\\"}]"
+                else
+                        errorMsg="${errorMsg//\"/\\\"}"
+                fi
+                if [ -z "${successMsg}" ]; then
+                        successMsg=""
+                else
+                        successMsg="${successMsg//\"/\\\"}"
+                fi
+                local _CMD="${cmd}; 
+                                if (( \$? )); then 
+                                        echo \"${errorMsg}\";
+                                        echo 'Aborting...';
+                                        exit 1;
+                                else
+                                        if [ ! -z \"${successMsg}\" ]; then
+                                                echo \"${successMsg}\";
+                                        fi;
+                                fi"
+                bash -c "${_CMD}" 2>&1 | logPipe
+        fi
+        set +o pipefail 
+        set +e
+}
+
+exeCmd_asUser()
+{
+        local user=${1}
+        local cmd=${2}
+        local errorMsg=${3}
+        local successMsg=${4}
+        if [ -z "${user}" ]; then
+                abort "(exeCmd_asUser): user name not provided"
+        fi
+        if [ -z "${cmd}" ]; then
+                abort "(exeCmd_asUser): command not provided"
+        else
+                local _CMD="runuser -l ${user} -c '${cmd}'"
+                exeCmd "${_CMD}" "${errorMsg}" "${successMsg}"
+        fi
+}
+
+#
+# NOTE: Called function must return
+#       >= 1 to indicate success or 
+#          0 to indicate failure
+#       Otherwise this function will fail
+#
+exeFunc()
+{
+        local func=$1
+        local errorMsg=$2
+        local successMsg=$3
+        if [ -z "${func}" ]; then
+                abort "(exeFunc): Function name not provided"
+        fi
+        if (( $(${func}) )); then
+                if [ ! -z "${successMsg}" ]; then
+                        log "${successMsg}"
+                fi
+        else
+                if [ -z "${errorMsg}" ]; then
+			abort "ERROR: Failed to execute function: ${func}"
+		else
+                        abort "${errorMsg}"
+                fi
+        fi
+} 
+
+isFunction()
+{
+	local func=$1
+	if [ -z "${func}" ]; then
+		abort "Function name not provided"
+	fi
+	if (( $(LC_ALL=C type -t ${func}) )); then
+		echo 0
+	else
+		echo 1
+	fi
+} 
+
+__initExeCmdLibrary
+
+#
+# Bash logging library
+#
+
+__initLoggingLibrary()
+{
+	(( ${__LOGGING_LIB_INITIALIZED__} )) && return
+	readonly __LOGGING_LIB_INITIALIZED__=1
+
+	readonly DEFAULT_LOG_DIR="${pwd}"
+	readonly DEFAULT_LOG_FILE_NAME="app.log"
+	readonly DEFAULT_LOG_TAG="APP-LOG"
+
+	LOG_DIR="${DEFAULT_LOG_DIR}"
+	LOG_FILE_NAME="${DEFAULT_LOG_FILE_NAME}"
+	LOG_FILE="${LOG_DIR}/${LOG_FILE_NAME}"
+	LOG_TAG="${DEFAULT_LOG_TAG}"
+
+	LOGGING_ENABLED=0
+	LOGGING_BACKUP=0
+}
+
+setLogDirectory()
+{
+	LOG_DIR=${1:-${LOG_DIR}}
+	LOG_FILE="${LOG_DIR}/${LOG_FILE_NAME}"
+}
+
+setLogFileName()
+{
+	LOG_FILE_NAME=${1:-${LOG_FILE_NAME}}
+	LOG_FILE="${LOG_DIR}/${LOG_FILE_NAME}"
+}
+
+setLogTag()
+{
+	LOG_TAG=$1
+}
+
+enableLogging()
+{
+	LOGGING_ENABLED=1
+}
+
+disableLogging()
+{
+	LOGGING_ENABLED=0
+}
+
+enableLogBackup()
+{
+	LOGGING_BACKUP=1
+}
+
+disableLogBackup()
+{
+	LOGGING_BACKUP=0 
+}
+
+newLogFile()
+{
+	if [ -f "${LOG_FILE}" ]; then
+		if (( ${LOGGING_ENABLED} )) && (( ${LOGGING_BACKUP} )); then
+			local backupLogFile="${LOG_FILE}-$(ls --full-time ${LOG_FILE} | awk '{ print $6"_"$7 }' | sed 's/[.].*$//')"
+			if (( $(cp ${LOG_FILE} ${backupLogFile} 2>&1; echo $?) )); then
+				echo "WARN: Failed to create backup of the previous log file"
+			fi
+		fi
+	fi
+	if (( $(cat /dev/null > ${LOG_FILE} 2>&1; echo $?) )); then
+		echo "Failed to create/clear the log file [${LOG_FILE}]"
+		echo "Exiting..."
+		exit 1
+	fi
+}
+
+log()
+{
+	if (( LOGGING_ENABLED )); then
+		echo -e "${1}" | tee -a ${LOG_FILE}
+	else
+		echo -e "${1}"
+	fi
+}
+
+logPipe()
+{
+	while read message; do
+		log "${message}"
+	done
+}
+
+abort()
+{
+	local msg=${1}
+	local exitCode=${2:-1}
+	log "${1}"
+	log "Aborting..."
+	exit ${exitCode}
+}
+
+__initLoggingLibrary
+
+#
+# Misc bash utility functions
+#
+# Dependency: bash-lib-logging
+#
+
+
+__initMiscLibrary()
+{
+	(( ${__MISC_LIB_INITIALIZED__} )) && return
+	readonly __MISC_LIB_INITIALIZED__=1 
+}
+
+push_dir() 
+{
+	local directoryName=${1}
+	if [ -z "${directoryName}" ]; then
+		abort "Direcotry name not provide."
+	fi
+	if [ ! -d "${directoryName}" ]; then
+		abort "Direcotry doesn't exist."
+	fi
+	pushd ${directoryName} > /dev/null 2>&1
+	if (( $? )); then
+		abort "Failed to push directory [${directoryName}] on to stack."
+	fi
+}
+
+pop_dir()
+{
+	popd > /dev/null 2>&1
+	if (( $? )); then
+		abort "Possible coding error."
+	fi
+}
+
+
+
+createDirectory()
+{
+	local directoryName=${1}
+	if [ -z "${directoryName}" ]; then
+		abort "Direcotry name not provide."
+	fi
+	if [ ! -d "${directoryName}" ]; then
+		mkdir -p ${directoryName}
+		if (( $? )); then
+			abort "Failed to create directory [${directoryName}]"
+		fi
+	fi
+}
+
+clearDirectory()
+{
+	local directoryName=${1}
+	if [ -z "${directoryName}" ]; then
+		abort "Direcotry name not provide."
+	fi
+	if [ ! -d "${directoryName}" ]; then
+		abort "Direcotry doesn't exist."
+	fi
+	if [ -d "${directoryName}" ]; then
+		if (( $(ls -A ${WRK_DIR} | wc -l) > 0 )); then
+			log "Work directory is not empty.  Clearing it..."
+			push_dir ${directoryName} 
+			rm -rf ./*
+			local error=${?}
+			pop_dir 
+			if (( ${error} )); then
+				abort "Failed to clear directory [${directoryName}]"
+			fi
+		fi	
+	else
+		createDirectory ${directoryName}
+	fi	
+}
+
+#
+# NOTE: doesn't work right...
+#
+getFullPath()
+{
+	local file=${1}
+	local fullPath=""
+	if [ -z "${file}" ]; then
+		abort "Fire/directory name not provide."
+	fi	
+	if [ -d "${file}" ]; then
+		pushd "${file}" > /dev/null
+		fullPath=$(pwd)
+		popd
+	elif [ -f "${file}" ]; then
+		pushd "$(dirname ${file})" > /dev/null
+		fullPath="$(pwd)/$(basename ${file})"
+		popd
+	else
+		abort "File/directory [${file}] doesn't exist."
+	fi
+	echo "${fullPath}"
+}
+
+__initMiscLibrary
+
 #
 # 
-#
+# 
 
-source dependency-manager
-
-function isClusterExist 
-{
+isClusterExist() {
 	local clusterName=${1}
 	local clustersList=($(kind get clusters 2> /dev/null))
 	local clustersCount=${#clustersList[@]}
-	if [ $clustersCount > 0 ] && [[ " ${clustersList[@]} " =~ " ${clusterName} " ]]; then
+	if (( $clustersCount > 0 )) && [[ " ${clustersList[@]} " =~ " ${clusterName} " ]]; then
 		exit 0
 	else
 		exit 1
 	fi 
 }
 
+#
+# Create Kubernetes cluster using "kind" 
+#
+
+createCluster() {
+	local configFile=""
+	local clusterName="" 
+
+	echo ""
+	while getopts "c:n:h" opt ${@}; do
+		case ${opt} in
+			c) configFile=${OPTARG} ;; 
+			n) clusterName=${OPTARG} ;; 
+			h)
+				echo "Usage: "
+				echo "        create-cluster [-c config-YAML-file] [-n cluster-name]"
+				echo ""
+				echo "        If no options are provided then default kind cluster is created"
+				echo ""
+				exit 0
+				;;
+		esac
+	done
+
+	if [[ ! -z "${configFile}" && ! -f ${configFile} ]]; then 
+		abort "Config file [${configFile}] doesn't exist. aborting..."; 
+	fi
+	readonly CONFIG_FILE=${configFile}
+	readonly CLUSTER_NAME=${clusterName:-kind}
+	readonly CTX_NAME="kind-${clusterName:-kind}" 
+	echo ""
+	echo "Creating cluster..."
+	echo ""
+	echo "  Cluster name      : ${CLUSTER_NAME}"
+	echo "  Cluster context   : ${CTX_NAME}"
+	echo "  Configuration file: ${CONFIG_FILE}"
+	echo "" 
+	if ( isClusterExist ${CLUSTER_NAME} ); then
+		abort "Cannot create.  [${CLUSTER_NAME}] cluster exists."
+	fi
+	if [[ -z "${CONFIG_FILE}" ]]; then
+		kind create cluster --name=${CLUSTER_NAME}
+	else
+		kind create cluster --config=${CONFIG_FILE} --name=${CLUSTER_NAME}
+	fi
+	if (( $? )); then echo "Failed to create cluster"; echo ""; exit 1; fi
+	echo "Successfuly created cluster"
+	echo ""
+}
+
+#
+# Delete Kubernetes cluster created using "kind"
+#
+
+deleteCluster() {
+	echo ""
+	while getopts "n:h" opt ${@}; do
+		case ${opt} in
+			n) clusterName=${OPTARG} ;;
+			h)
+				echo "Usage: "
+				echo "        deleteCluster [-n cluster-name]"
+				echo ""
+				echo "        If cluster name is not provided then default kind cluster is deleted"
+				echo ""
+				exit 0
+				;;
+		esac
+	done
+
+	readonly CLUSTER_NAME=${clusterName:-kind}
+
+	echo "Deleting [${CLUSTER_NAME}] cluster..."
+	if ( isClusterExist ${CLUSTER_NAME} ); then
+		read -p "Are you sure you want to delete [${CLUSTER_NAME}] cluster? [Y/N] " -n1 userResponse
+		echo ""
+		if [[ "${userResponse,,}" == "y" ]]; then
+			kind delete cluster --name=${CLUSTER_NAME} 
+			if (( $? )); then 
+				echo "Failed to delete cluster"
+			else 
+				echo "Deleted the cluster"
+			fi
+		else
+			echo "Not deleting the cluster."
+		fi
+	else
+		echo "[${CLUSTER_NAME}] cluster doesn't exist."
+	fi 
+	echo ""
+}
+
+#
+# Setup dashboard & generate dashboard login "kubeconfig" file
+# 
+
+setupDashboard() {
+	source utils.sh
+	source config/dashboard.conf
+
+	local svcAccount=""
+	local clusterName=""
+
+	echo ""
+	while getopts "s:n:h" opt ${@}; do
+		case ${opt} in
+			s) svcAccount=${OPTARG} ;; 
+			n) clusterName=${OPTARG} ;; 
+			h)
+				echo "Usage: "
+				echo "        setupDashboard [-s service-account-name] [-n cluster-name]"
+				echo ""
+				echo "        If no options are provided then dashboard is setup in default [kind] cluster"
+				echo "        with service account [dashboard-admin]"
+				echo ""
+				exit 0
+				;; 
+		esac
+	done
+
+	readonly SVC_ACCOUNT=${svcAccount:-dashboard-admin}
+	readonly CLUSTER_NAME=${clusterName:-kind}
+	readonly CTX_NAME="kind-${clusterName:-kind}"
+	readonly KUBECONFIG_FILE="${KUBECONFIG_DIR}/${CTX_NAME}.kubeconfig" 
+
+	# Set up dashboard
+	echo ""
+	echo "Setting up dashboard..."
+	echo ""
+	echo "  Cluster name             : ${CLUSTER_NAME}"
+	echo "  Cluster context          : ${CTX_NAME}"
+	echo "  Dashboard service account: ${SVC_ACCOUNT}"
+	echo "  Kube config file         : ${KUBECONFIG_FILE}" 
+	echo "" 
+	if ( ! $(createDirectory ${KUBECONFIG_DIR}) ); then
+		abort "Failed to create kubeconfig directory [${KUBECONFIG_DIR}] to store kubeconfig files"
+	fi 
+	if ( ! $(isClusterExist ${CLUSTER_NAME}) ); then
+		abort "Cannot setup dashboard. [${CLUSTER_NAME}] cluster is not setup."
+	fi
+	kubectl config use-context ${CTX_NAME} 
+	kubectl apply -f ${DASHBOARD_SETUP_YAML_URL} 
+	(( $? )) && abort  "Failed to setup dashboard"
+	sleep 3
+
+	# Create service account in default namespace with cluster admin role (for ease of use)
+	echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
+	kubectl create serviceaccount ${SVC_ACCOUNT} -n default 
+	(( $? )) && abort "Failed to create service account"
+	sleep 2
+	kubectl create clusterrolebinding dashboard-admin \
+		-n default \
+		--clusterrole=cluster-admin \
+		--serviceaccount=default:${SVC_ACCOUNT} 
+	(( $? )) && abort "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"
+	sleep 2
+
+	# Generate dashboard login "kubeconfig" file
+	echo "Generating dashboard login kubeconfig file: ${KUBECONFIG_FILE} ..."
+	SVC_ACCOUNT_SECRET_NAME=$(kubectl get serviceaccount ${SVC_ACCOUNT} -n default -o jsonpath='{.secrets[0].name}')
+	(( $? )) && abort "Failed to get service account secret key name"
+	CA=$(kubectl get secret ${SVC_ACCOUNT_SECRET_NAME} -n default -o jsonpath='{.data.ca\.crt}')
+	(( $? )) && abort "Failed to get service account certificate authority"
+	TOKEN=$(kubectl get secret ${SVC_ACCOUNT_SECRET_NAME} -n default -o jsonpath='{.data.token}' | base64 --decode)
+	(( $? )) && abort "Failed to get service account secret token"
+
+	cat <<-EOF > ${KUBECONFIG_FILE}
+		apiVersion: v1
+		kind: Config
+		clusters:
+		  - name: ${CLUSTER_NAME}
+		    cluster:
+		      certificate-authority-data: ${CA}
+		contexts:
+		  - name: ${CTX_NAME}
+		    context:
+		      cluster: ${CLUSTER_NAME}
+		      namespace: default
+		      user: ${SVC_ACCOUNT}
+		current-context: ${CTX_NAME}
+		users:
+		  - name: ${SVC_ACCOUNT}
+		    user:
+		      token: ${TOKEN}
+		EOF
+
+	(( $? )) && abort "Failed to create kubeconfig file: ${KUBECONFIG_FILE}"
+	echo "Succesfully setup kubernetes dashbaord & created kubeconfig file: ${KUBECONFIG_FILE}"
+	echo ""
+}
+
+#
+# Start proxy
+# 
+
+startProxy() {
+	source config/proxy.conf
+
+	readonly TRUE=1
+	readonly FALSE=0
+	clusterName=""
+	proxyPort=0
+	openDashboardInBrowser=${FALSE}
+
+	echo ""
+	while getopts "n:p:oh" opt ${@}; do
+		case ${opt} in
+			n) clusterName=${OPTARG} ;;
+			p) proxyPort=${OPTARG} ;;
+			o) openDashboardInBrowser=${TRUE} ;;
+			h)
+				echo "Usage: "
+				echo "    start-proxy [-n cluster-name] [-p proxy-port]"
+				echo ""
+				echo "    The default values are:"
+				echo "         cluster-name  : kind"
+				echo "         proxy-port    : RANDOM PORT"
+				echo ""
+				exit 0
+				;;
+		esac
+	done
+
+	readonly CLUSTER_NAME="${clusterName:-kind}"
+	readonly CTX_NAME="kind-${clusterName:-kind}"
+	readonly PROXY_PORT_FILE="${DATA_DIR}/${CTX_NAME}"
+	readonly PROXY_STATUS_FILE="${DATA_DIR}/${CTX_NAME}-status"
+
+	echo "Starting proxy..."
+	if ! ( isClusterExist ${CLUSTER_NAME} ); then 
+        	abort "Cannot create proxy. [${CLUSTER_NAME}] cluster doesn't exists."
+	fi 
+	if [[ ! -d ${DATA_DIR} ]]; then
+		mkdir -p ${DATA_DIR}
+		(( $? )) && abort "Failed to create data directory [${DATA_DIR}] to store running proxy server's port number"
+	fi 
+	if [[ -f ${PROXY_PORT_FILE} ]]; then
+		source ${PROXY_PORT_FILE}
+		readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT} | wc -l)
+		(( ${PS_COUNT} > 0 )) && abort "Proxy already running..."
+	fi
+	PROXY_PORT="${proxyPort:-0}"
+	echo "Setting current context to [${CTX_NAME}]..."
+	kubectl config use-context ${CTX_NAME}
+	kubectl proxy --port=${PROXY_PORT} > ${PROXY_STATUS_FILE} 2>&1 &
+	sleep 3
+	(( $? )) && abort "Failed to start proxy"
+	PROXY_PORT=$(cat ${PROXY_STATUS_FILE} | grep -i "starting to serve on" | sed 's/.*://')
+	DASHBOARD_URL="http://localhost:${PROXY_PORT}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy"
+	echo "PROXY_PORT=${PROXY_PORT}" > ${PROXY_PORT_FILE} 
+	echo "Proxy started on port ${PROXY_PORT}"
+	echo "You can access the Kubernetes dashboard at the following URL:"
+	echo "${DASHBOARD_URL}"
+	echo "Opening dashboard in the browser..."
+	xdg-open ${DASHBOARD_URL}
+	(( $? )) && echo "Failed to start proxy"
+	echo "Opened the dashboard in the browser"
+}
+
+#
+# Stop proxy
+#
+
+getProcessCount() {
+	local _checkData=${1}
+	if [ -z ${_checkData} ]; then
+		echo 0
+	else
+		echo $(echo ${_checkData} | wc -l)
+	fi
+}
+
+stopProxy() {
+	source config/proxy.conf
+
+	echo ""
+	while getopts "n:h" opt ${@}; do
+		case ${opt} in
+			n) clusterName=${OPTARG} ;;
+			h)
+				echo "Usage: "
+				echo "        stop-proxy [-n cluster-name]"
+				echo ""
+				echo "        The default cluster name is [kind]"
+				echo ""
+				exit 0
+				;;
+		esac
+	done
+
+	readonly CLUSTER_NAME=${clusterName:-kind}
+	readonly CTX_NAME="kind-${clusterName:-kind}"
+	readonly PROXY_PORT_FILE=${DATA_DIR}/${CTX_NAME}
+
+	echo "Stopping proxy for [${CLUSTER_NAME}] cluster..."
+	if [[ ! -f ${PROXY_PORT_FILE} ]]; then
+		abort "Unable to locate proxy data file [${PROXY_PORT_FILE}] for [${CLUSTER_NAME}] cluster"
+	fi
+	source ${PROXY_PORT_FILE} 
+	readonly checkData=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT})
+	if (( $(getProcessCount ${checkData}) == 0 )); then 
+		abort "Proxy not running..."; 
+	fi 
+	readonly processId=$(echo $checkData | awk '{print $7}' | awk 'BEGIN { FS = "/" } ; {print $1}')
+	kill -9 ${processId} > /dev/null 2>&1
+	(( $? )) && abort "Failed to stop proxy"
+	echo "Successfully stopped proxy"
+	echo ""
+}
+
+ 
+#
+# 
+#
+
+category=$1
+command=$2
+shift 1
+
+case $category in
+	cluster)
+		case $command in
+			create) createCluster $@ ;;
+			delete) deleteCluster $@ ;;
+		esac
+		;;
+	dashboard)
+		case $command in
+			setup) setupDashboard $@ ;;
+		esac
+		;;
+	proxy)
+		case $command in
+			start) startProxy ;;
+			stop) stopProxy;;
+		esac
+		;; 
+esac
 
 
+ 
 #::END::
