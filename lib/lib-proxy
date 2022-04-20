@@ -46,14 +46,16 @@ startProxy() {
 	fi 
 	if [[ -f ${PROXY_PORT_FILE} ]]; then
 		source ${PROXY_PORT_FILE}
-		readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT} | wc -l)
-		(( ${PS_COUNT} > 0 )) && abort "Proxy already running..."
+		if [[ ! -z ${PROXY_PORT} ]] && (( ${PROXY_PORT} > 0 )); then
+			readonly PS_COUNT=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT} | wc -l)
+			(( ${PS_COUNT} > 0 )) && abort "Proxy already running..."
+		fi
 	fi
 	PROXY_PORT="${proxyPort:-0}"
 	echo "Setting current context to [${CTX_NAME}]..."
 	kubectl config use-context ${CTX_NAME}
 	kubectl proxy --port=${PROXY_PORT} > ${PROXY_STATUS_FILE} 2>&1 &
-	sleep 3
+	sleep 5
 	(( $? )) && abort "Failed to start proxy"
 	PROXY_PORT=$(cat ${PROXY_STATUS_FILE} | grep -i "starting to serve on" | sed 's/.*://')
 	DASHBOARD_URL="http://localhost:${PROXY_PORT}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy"
@@ -61,10 +63,12 @@ startProxy() {
 	echo "Proxy started on port ${PROXY_PORT}"
 	echo "You can access the Kubernetes dashboard at the following URL:"
 	echo "${DASHBOARD_URL}"
-	echo "Opening dashboard in the browser..."
-	xdg-open ${DASHBOARD_URL}
-	(( $? )) && echo "Failed to start proxy"
-	echo "Opened the dashboard in the browser"
+	if [[ $openDashboardInBrowser == ${TRUE} ]]; then
+		echo "Opening dashboard in the browser..."
+		xdg-open ${DASHBOARD_URL}
+		(( $? )) && echo "Failed to start proxy"
+		echo "Opened the dashboard in the browser"
+	fi
 }
 
 #
@@ -107,6 +111,9 @@ stopProxy() {
 		abort "Unable to locate proxy data file [${PROXY_PORT_FILE}] for [${CLUSTER_NAME}] cluster"
 	fi
 	source ${PROXY_PORT_FILE} 
+	if [[ -z ${PROXY_PORT} ]] || (( ${PROXY_PORT} <= 0 )); then
+		abort "Failed to get proxy port. Unable stop proxy."
+	fi
 	readonly checkData=$(netstat -antp 2> /dev/null | grep kubectl | grep ${PROXY_PORT})
 	if (( $(getProcessCount ${checkData}) == 0 )); then 
 		abort "Proxy not running..."; 

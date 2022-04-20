@@ -41,10 +41,10 @@ setupDashboard() {
 	echo "  Dashboard service account: ${SVC_ACCOUNT}"
 	echo "  Kube config file         : ${KUBECONFIG_FILE}" 
 	echo "" 
-	if (( ! $(createDirectory ${KUBECONFIG_DIR}) )); then
+	if ( ! $(createDirectory ${KUBECONFIG_DIR}) ); then
 		abort "Failed to create kubeconfig directory [${KUBECONFIG_DIR}] to store kubeconfig files"
 	fi 
-	if (( ! $(isClusterExist ${CLUSTER_NAME}) )); then
+	if ( ! $(isClusterExist ${CLUSTER_NAME}) ); then
 		abort "Cannot setup dashboard. [${CLUSTER_NAME}] cluster is not setup."
 	fi
 	kubectl config use-context ${CTX_NAME} 
