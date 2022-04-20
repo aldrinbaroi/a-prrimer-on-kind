@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 # Setup dashboard & generate dashboard login "kubeconfig" file
 # 
@@ -16,7 +17,7 @@ setupDashboard() {
 			n) clusterName=${OPTARG} ;; 
 			h)
 				echo "Usage: "
-                	        echo "        setup-dashboard [-s service-account-name] [-n cluster-name]"
+				echo "        setupDashboard [-s service-account-name] [-n cluster-name]"
 				echo ""
 				echo "        If no options are provided then dashboard is setup in default [kind] cluster"
 				echo "        with service account [dashboard-admin]"
@@ -40,56 +41,59 @@ setupDashboard() {
 	echo "  Dashboard service account: ${SVC_ACCOUNT}"
 	echo "  Kube config file         : ${KUBECONFIG_FILE}" 
 	echo "" 
-	if ( ! $(createDirectory ${KUBECONFIG_DIR}) ); then
+	if (( ! $(createDirectory ${KUBECONFIG_DIR}) )); then
 		abort "Failed to create kubeconfig directory [${KUBECONFIG_DIR}] to store kubeconfig files"
 	fi 
-	if ( ! $(isClusterExist ${CLUSTER_NAME}) ); then
+	if (( ! $(isClusterExist ${CLUSTER_NAME}) )); then
 		abort "Cannot setup dashboard. [${CLUSTER_NAME}] cluster is not setup."
 	fi
 	kubectl config use-context ${CTX_NAME} 
 	kubectl apply -f ${DASHBOARD_SETUP_YAML_URL} 
-	if (( $? )); then abort  "Failed to setup dashboard"; fi
+	(( $? )) && abort  "Failed to setup dashboard"
 	sleep 3
 
 	# Create service account in default namespace with cluster admin role (for ease of use)
 	echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
 	kubectl create serviceaccount ${SVC_ACCOUNT} -n default 
-	if (( $? )); then abort  "Failed to create service account"; fi
+	(( $? )) && abort "Failed to create service account"
 	sleep 2
-	kubectl create clusterrolebinding dashboard-admin -n default --clusterrole=cluster-admin --serviceaccount=default:${SVC_ACCOUNT} 
-	if (( $? )); then abort  "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"; fi
+	kubectl create clusterrolebinding dashboard-admin \
+		-n default \
+		--clusterrole=cluster-admin \
+		--serviceaccount=default:${SVC_ACCOUNT} 
+	(( $? )) && abort "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"
 	sleep 2
 
 	# Generate dashboard login "kubeconfig" file
 	echo "Generating dashboard login kubeconfig file: ${KUBECONFIG_FILE} ..."
 	SVC_ACCOUNT_SECRET_NAME=$(kubectl get serviceaccount ${SVC_ACCOUNT} -n default -o jsonpath='{.secrets[0].name}')
-	if (( $? )); then abort  "Failed to get service account secret key name"; fi
+	(( $? )) && abort "Failed to get service account secret key name"
 	CA=$(kubectl get secret ${SVC_ACCOUNT_SECRET_NAME} -n default -o jsonpath='{.data.ca\.crt}')
-	if (( $? )); then abort  "Failed to get service account certificate authority"; fi
+	(( $? )) && abort "Failed to get service account certificate authority"
 	TOKEN=$(kubectl get secret ${SVC_ACCOUNT_SECRET_NAME} -n default -o jsonpath='{.data.token}' | base64 --decode)
-	if (( $? )); then abort  "Failed to get service account secret token"; fi
+	(( $? )) && abort "Failed to get service account secret token"
 
 	cat <<-EOF > ${KUBECONFIG_FILE}
 		apiVersion: v1
 		kind: Config
 		clusters:
-		  - name: ${CTX_NAME}
+		  - name: ${CLUSTER_NAME}
 		    cluster:
 		      certificate-authority-data: ${CA}
 		contexts:
 		  - name: ${CTX_NAME}
 		    context:
-		      cluster: ${CTX_NAME}
+		      cluster: ${CLUSTER_NAME}
 		      namespace: default
-		      user: ${CTX_NAME}
+		      user: ${SVC_ACCOUNT}
 		current-context: ${CTX_NAME}
 		users:
-		  - name: ${CTX_NAME}
+		  - name: ${SVC_ACCOUNT}
 		    user:
 		      token: ${TOKEN}
 		EOF
 
-	if (( $? )); then abort  "Failed to create kubeconfig file: ${KUBECONFIG_FILE}"; fi
+	(( $? )) && abort "Failed to create kubeconfig file: ${KUBECONFIG_FILE}"
 	echo "Succesfully setup kubernetes dashbaord & created kubeconfig file: ${KUBECONFIG_FILE}"
 	echo ""
 }
