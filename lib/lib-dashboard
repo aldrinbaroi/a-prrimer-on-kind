@@ -11,10 +11,11 @@ setupDashboard() {
 	local clusterName=""
 
 	echo ""
-	while getopts "s:n:h" opt ${@}; do
+	while getopts "s:n:p:h" opt ${@}; do
 		case ${opt} in
 			s) svcAccount=${OPTARG} ;; 
 			n) clusterName=${OPTARG} ;; 
+			p) dashboarchPort=${OPTARG} ;; 
 			h)
 				echo "Usage: "
 				echo "        setupDashboard [-s service-account-name] [-n cluster-name]"
@@ -35,6 +36,7 @@ setupDashboard() {
 	# Set up dashboard
 	echo ""
 	echo "Setting up dashboard..."
+
 	echo ""
 	echo "  Cluster name             : ${CLUSTER_NAME}"
 	echo "  Cluster context          : ${CTX_NAME}"
@@ -94,6 +96,12 @@ setupDashboard() {
 		EOF
 
 	(( $? )) && abort "Failed to create kubeconfig file: ${KUBECONFIG_FILE}"
+	echo "Setting up remote access to dashboard..."
+	if [[ -z $dashboardPort ]] || (( $dashboardPort == 0)) ; then
+		
+	fi
+	kubectl port-forward --address=localhost,$(getHostIP) -n kubernetes-dashboard service/kubernetes-dashboard $DASHBOARD_PORT:443
+	(( $? )) && abort "Failed to setup remote access to dashbaord"
 	echo "Succesfully setup kubernetes dashbaord & created kubeconfig file: ${KUBECONFIG_FILE}"
 	echo ""
 }
