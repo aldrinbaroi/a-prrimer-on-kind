@@ -3,8 +3,17 @@
 # Setup dashboard & generate dashboard login "kubeconfig" file
 # 
 
+isDashboardAppRunning() {
+	appStatus=$(kubectl get pods -n kubernetes-dashboard -o=jsonpath="{range .items[?(@.metadata.labels.k8s-app=='kubernetes-dashboard')]}{range .status.containerStatuses[?(@.name=='kubernetes-dashboard')]}{.state}{'\n'}{end}" | jq 'keys'[0])
+	[[ -z ${appStatus// /} || $appStatus != "\"running\"" ]] && exit 1 # || exit 0
+        serviceTargetPort=$(kubectl get service kubernetes-dashboard -n kubernetes-dashboard -o jsonpath="{.spec.ports[0].targetPort}")
+	[[ -z ${serviceTargetPort// /} ]] && exit 1
+	endPointPort=$(kubectl get endpoints -n kubernetes-dashboard -o jsonpath="{range .items[?(@.metadata.name=='kubernetes-dashboard')]}{.subsets[0].ports[0].port}")
+	[[ -z ${endPointPort// /} ]] && exit 1
+	(( $serviceTargetPort == $endPointPort )) && exit 0 || exit 1
+}
+
 setupDashboard() {
-	source utils.sh
 	source config/dashboard.conf
 
 	local svcAccount=""
@@ -15,7 +24,7 @@ setupDashboard() {
 		case ${opt} in
 			s) svcAccount=${OPTARG} ;; 
 			n) clusterName=${OPTARG} ;; 
-			p) dashboarchPort=${OPTARG} ;; 
+			p) dashboardPort=${OPTARG} ;; 
 			h)
 				echo "Usage: "
 				echo "        setupDashboard [-s service-account-name] [-n cluster-name]"
@@ -31,9 +40,11 @@ setupDashboard() {
 	readonly SVC_ACCOUNT=${svcAccount:-dashboard-admin}
 	readonly CLUSTER_NAME=${clusterName:-kind}
 	readonly CTX_NAME="kind-${clusterName:-kind}"
-	readonly KUBECONFIG_FILE="${KUBECONFIG_DIR}/${CTX_NAME}.kubeconfig" 
+	readonly KUBECONFIG_FILE="${DATA_DIR}/${CTX_NAME}.kubeconfig" 
+	readonly DASHBOARD_PORT="${dashboardPort:-0}"
+	readonly DASHBOARD_FILE="${DATA_DIR}/${CTX_NAME}.dashboard"
 
-	# Set up dashboard
+	# Set up dashboard 
 	echo ""
 	echo "Setting up dashboard..."
 
@@ -43,8 +54,8 @@ setupDashboard() {
 	echo "  Dashboard service account: ${SVC_ACCOUNT}"
 	echo "  Kube config file         : ${KUBECONFIG_FILE}" 
 	echo "" 
-	if ( ! $(createDirectory ${KUBECONFIG_DIR}) ); then
-		abort "Failed to create kubeconfig directory [${KUBECONFIG_DIR}] to store kubeconfig files"
+	if ( ! $(createDirectory ${DATA_DIR}) ); then
+		abort "Failed to create kubeconfig directory [${DATA_DIR}] to store kubeconfig files"
 	fi 
 	if ( ! $(isClusterExist ${CLUSTER_NAME}) ); then
 		abort "Cannot setup dashboard. [${CLUSTER_NAME}] cluster is not setup."
@@ -53,7 +64,7 @@ setupDashboard() {
 	kubectl apply -f ${DASHBOARD_SETUP_YAML_URL} 
 	(( $? )) && abort  "Failed to setup dashboard"
 	sleep 3
-
+if false; then
 	# Create service account in default namespace with cluster admin role (for ease of use)
 	echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
 	kubectl create serviceaccount ${SVC_ACCOUNT} -n default 
@@ -65,7 +76,7 @@ setupDashboard() {
 		--serviceaccount=default:${SVC_ACCOUNT} 
 	(( $? )) && abort "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"
 	sleep 2
-
+fi
 	# Generate dashboard login "kubeconfig" file
 	echo "Generating dashboard login kubeconfig file: ${KUBECONFIG_FILE} ..."
 	SVC_ACCOUNT_SECRET_NAME=$(kubectl get serviceaccount ${SVC_ACCOUNT} -n default -o jsonpath='{.secrets[0].name}')
@@ -97,12 +108,20 @@ setupDashboard() {
 
 	(( $? )) && abort "Failed to create kubeconfig file: ${KUBECONFIG_FILE}"
 	echo "Setting up remote access to dashboard..."
-	if [[ -z $dashboardPort ]] || (( $dashboardPort == 0)) ; then
-		
-	fi
-	kubectl port-forward --address=localhost,$(getHostIP) -n kubernetes-dashboard service/kubernetes-dashboard $DASHBOARD_PORT:443
+	while : ; do
+		sleep 1
+		isDashboardAppRunning
+		(( $? )) && break
+	done
+	nohup kubectl port-forward \
+		--address=localhost,$(getHostIP) \
+		-n kubernetes-dashboard \
+		service/kubernetes-dashboard \
+		$DASHBOARD_PORT:443 > ${DASHBOARD_FILE} 2>&1  &
 	(( $? )) && abort "Failed to setup remote access to dashbaord"
-	echo "Succesfully setup kubernetes dashbaord & created kubeconfig file: ${KUBECONFIG_FILE}"
+	echo "Succesfully setup kubernetes dashbaord"
+	echo "Dashboard login token: $TOKEN"
+	echo "kubeconfig file: ${KUBECONFIG_FILE}"
 	echo ""
 }
 
