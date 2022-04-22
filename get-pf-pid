@@ -1,0 +1,17 @@
+#!/bin/bash
+
+DASHBOARD_FILE="data/kind-kind.dashboard"
+
+existingExposedPort=$(cat ${DASHBOARD_FILE} | grep $(get-host-ip) | sed -r 's/.*:([[:digit:]]+).*/\1/')
+
+echo ">>"
+echo "existing exposed port = $existingExposedPort"
+echo ">>"
+
+existingProcessId=$(netstat -antp 2> /dev/null | awk '/'$existingExposedPort'/ && /kubectl/ {print $7}' | uniq | sed -r 's/([[:digit:]]+).*/\1/')
+
+echo ">>"
+echo "existing process id = $existingProcessId" 
+echo ">>"
+
+#::END::

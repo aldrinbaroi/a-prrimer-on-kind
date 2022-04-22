@@ -1,0 +1,13 @@
+#!/bin/bash
+
+used_ports=( $(netstat -ant4 | awk '(NR>2) {print $4"\n"$5}' | sed -e '/0[.]0[.]0[.]0/d' | sed -r 's/.*:([[:digit:]]+).*/\1/') )
+while : ; do
+	unused_port=$RANDOM
+	echo "1>uup:$unused_port"
+	[[ ! " ${used_ports[*]} " =~ " ${unused_port} " ]] && break
+done
+
+echo $unused_port
+
+#::END::
+
