@@ -17,6 +17,8 @@ case $category in
 	dashboard)
 		case $command in
 			setup) setupDashboard $@ ;;
+			remove) removeDashbaord $@ ;;
+			help) dashboardHelp $@ ;;
 		esac
 		;;
 	proxy)

@@ -3,14 +3,20 @@
 # Setup dashboard & generate dashboard login "kubeconfig" file
 # 
 
+downloadDashboardSetupYAMLFile() {
+	source config/dashboard.conf 
+	curl -o config/dashboard-${DASHBOARD_RELEASE_TAG}.yaml ${DASHBOARD_SETUP_YAML_URL} 
+	(( $? )) && abort "Failed to download dashboard setup YAML file"
+}
+
 isDashboardAppRunning() {
 	appStatus=$(kubectl get pods -n kubernetes-dashboard -o=jsonpath="{range .items[?(@.metadata.labels.k8s-app=='kubernetes-dashboard')]}{range .status.containerStatuses[?(@.name=='kubernetes-dashboard')]}{.state}{'\n'}{end}" | jq 'keys'[0])
-	[[ -z ${appStatus// /} || $appStatus != "\"running\"" ]] && exit 1 # || exit 0
+	[[ -z ${appStatus// /} || $appStatus != "\"running\"" ]] && echo 0 && return 0
         serviceTargetPort=$(kubectl get service kubernetes-dashboard -n kubernetes-dashboard -o jsonpath="{.spec.ports[0].targetPort}")
-	[[ -z ${serviceTargetPort// /} ]] && exit 1
+	[[ -z ${serviceTargetPort// /} ]] && echo 0 && return 0
 	endPointPort=$(kubectl get endpoints -n kubernetes-dashboard -o jsonpath="{range .items[?(@.metadata.name=='kubernetes-dashboard')]}{.subsets[0].ports[0].port}")
-	[[ -z ${endPointPort// /} ]] && exit 1
-	(( $serviceTargetPort == $endPointPort )) && exit 0 || exit 1
+	[[ -z ${endPointPort// /} ]] && echo 0 && return 0
+	(( $serviceTargetPort == $endPointPort )) && echo 1 || echo 0
 }
 
 isServiceAccountExist() {
@@ -23,46 +29,75 @@ isClusterRoleBindingExist() {
 	[[ -z ${accountName// /} || ${accountName} != "\"dashboard-admin\"" ]] && echo "0" || echo "1" 
 }
 
-setupDashboard() {
-	source config/dashboard.conf
+findUnusedPort() {
+	local used_ports=( $(netstat -ant4 | awk '(NR>2) {print $4"\n"$5}' | sed -e '/0[.]0[.]0[.]0/d' | sed -r 's/.*:([[:digit:]]+).*/\1/') )
+	while : ; do
+		unused_port=$((1024 + RANDOM))
+		[[ ! " ${used_ports[*]} " =~ " ${unused_port} " ]] && break
+	done
+	echo $unused_port
+}
 
-	local svcAccount=""
-	local clusterName=""
+killExistingExposedPort() {
+	local dashboardFile=${1// /}
+	[[ -z ${dashboardFile} && -f ${dashboardFile} ]] && return 0
+	existingExposedPort=$(cat ${dashboardFile} | grep $(getHostIP) | sed -r 's/.*:([[:digit:]]+).*/\1/')
+	if [[ -z ${existingExposedPort} ]]; then
+		existingExposedPort=$(cat ${dashboardFile} | grep "127.0.0.1" | sed -r 's/.*:([[:digit:]]+).*/\1/')
+		[[ -z ${existingExposedPort} ]] && return 0
+	fi
+	existingProcessId=$(netstat -antp 2> /dev/null | awk '/'$existingExposedPort'/ && /kubectl/ {print $7}' | uniq | sed -r 's/([[:digit:]]+).*/\1/')
+	[[ -z ${existingProcessId// /} ]] && return 0
+	kill -9 ${existingProcessId}
+	(( $? )) && abort "Failed to kill existing dashboard exposed port" 
+}
 
+dashboardHelp() {
 	echo ""
-	while getopts "s:n:p:h" opt ${@}; do
+	echo "Usage: "
+	echo "  kindctl dashboard setup [-n cluster-name] [-s service-account-name] [-p dashboard-port]"
+	echo "  kindctl dashboard remove [-n cluster-name]"
+	echo "  kindctl dashbaord help"
+	echo ""
+	echo "  If no options are provided then dashboard is setup in default [kind] cluster"
+	echo "  with service account [dashboard-admin]"
+	echo ""
+}
+
+setupDashboard() {
+	source config/dashboard.conf 
+	local svcAccount=""
+	local clusterName="" 
+	echo ""
+	while getopts "n:s:p:h" opt ${@}; do
 		case ${opt} in
 			s) svcAccount=${OPTARG} ;; 
 			n) clusterName=${OPTARG} ;; 
 			p) dashboardPort=${OPTARG} ;; 
-			h)
-				echo "Usage: "
-				echo "        setupDashboard [-s service-account-name] [-n cluster-name]"
-				echo ""
-				echo "        If no options are provided then dashboard is setup in default [kind] cluster"
-				echo "        with service account [dashboard-admin]"
-				echo ""
-				exit 0
-				;; 
+			h) dashboardHelp && exit 0 ;;
+			*) echo "Invalid option ${opt}" && exit 1;; 
 		esac
 	done
-
+	dashboardPort=${dashboardPort:-0}
+	(( $dashboardPort == 0 )) && dashboardPort=$(findUnusedPort)
+	readonly HOST_IP=$(getHostIP) 
 	readonly SVC_ACCOUNT=${svcAccount:-dashboard-admin}
 	readonly CLUSTER_NAME=${clusterName:-kind}
 	readonly CTX_NAME="kind-${clusterName:-kind}"
 	readonly KUBECONFIG_FILE="${DATA_DIR}/${CTX_NAME}.kubeconfig" 
-	readonly DASHBOARD_PORT="${dashboardPort:-0}"
+	readonly DASHBOARD_PORT="${dashboardPort}"
 	readonly DASHBOARD_FILE="${DATA_DIR}/${CTX_NAME}.dashboard"
 
 	# Set up dashboard 
 	echo ""
-	echo "Setting up dashboard..."
-
+	echo "Setting up dashboard..." 
 	echo ""
 	echo "  Cluster name             : ${CLUSTER_NAME}"
 	echo "  Cluster context          : ${CTX_NAME}"
 	echo "  Dashboard service account: ${SVC_ACCOUNT}"
 	echo "  Kube config file         : ${KUBECONFIG_FILE}" 
+	echo "  Dashboard port           : ${DASHBOARD_PORT}"
+	echo "  Dashboard status file    : ${DASHBOARD_FILE}"
 	echo "" 
 	if ( ! $(createDirectory ${DATA_DIR}) ); then
 		abort "Failed to create kubeconfig directory [${DATA_DIR}] to store kubeconfig files"
@@ -71,11 +106,12 @@ setupDashboard() {
 		abort "Cannot setup dashboard. [${CLUSTER_NAME}] cluster is not setup."
 	fi
 	kubectl config use-context ${CTX_NAME} 
+	(( $? )) && abort  "Failed to set context"
 	kubectl apply -f ${DASHBOARD_SETUP_YAML_URL} 
 	(( $? )) && abort  "Failed to setup dashboard"
 	sleep 3
 	# Create service account in default namespace with cluster admin role (for ease of use)
-	echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
+	echo "Creating service account [${SVC_ACCOUNT}] in default namespace with cluster admin role..."
 	if (( $(isServiceAccountExist) )); then
 		echo "Service account exist."
 	else
@@ -128,9 +164,9 @@ setupDashboard() {
 	echo "Setting up remote access to dashboard..."
 	while : ; do
 		sleep 1
-		isDashboardAppRunning
-		(( $? )) && break
+		(( $(isDashboardAppRunning) )) && break
 	done
+	killExistingExposedPort "${DASHBOARD_FILE}"
 	nohup kubectl port-forward \
 		--address=localhost,$(getHostIP) \
 		-n kubernetes-dashboard \
@@ -138,9 +174,16 @@ setupDashboard() {
 		$DASHBOARD_PORT:443 > ${DASHBOARD_FILE} 2>&1  &
 	(( $? )) && abort "Failed to setup remote access to dashbaord"
 	echo "Succesfully setup kubernetes dashbaord"
+	echo "Dashboard URL: https://[$HOST_IP | localhost]:$DASHBOARD_PORT"
 	echo "Dashboard login token: $TOKEN"
-	echo "kubeconfig file: ${KUBECONFIG_FILE}"
 	echo ""
+}
+
+removeDashboard() {
+	echo "Removing dashboard..."
+	kubectl apply -f ${DASHBOARD_SETUP_YAML_URL}
+	(( $? )) && abort  "Failed to remove dashboard"
+	echo "Successfully removed dashbaord"
 }
 
 #::END:: 
