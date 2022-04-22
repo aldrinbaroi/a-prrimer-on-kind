@@ -13,6 +13,11 @@ isDashboardAppRunning() {
 	(( $serviceTargetPort == $endPointPort )) && exit 0 || exit 1
 }
 
+isServiceAccountExist() {
+	local svcAccount=$(kubectl get serviceaccount -o jsonpath="{range .items[?(@.metadata.name=='dashboard-admin')]}{@.metadata.name}")
+	[[ -z ${svcAccount// /} || ${svcAccount} != "dashboard-admin" ]] && echo "0" || echo "1"
+}
+
 setupDashboard() {
 	source config/dashboard.conf
 
@@ -64,19 +69,21 @@ setupDashboard() {
 	kubectl apply -f ${DASHBOARD_SETUP_YAML_URL} 
 	(( $? )) && abort  "Failed to setup dashboard"
 	sleep 3
-if false; then
-	# Create service account in default namespace with cluster admin role (for ease of use)
-	echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
-	kubectl create serviceaccount ${SVC_ACCOUNT} -n default 
-	(( $? )) && abort "Failed to create service account"
-	sleep 2
-	kubectl create clusterrolebinding dashboard-admin \
-		-n default \
-		--clusterrole=cluster-admin \
-		--serviceaccount=default:${SVC_ACCOUNT} 
-	(( $? )) && abort "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"
-	sleep 2
-fi
+	if (( $(isServiceAccountExist) )); then
+		echo "Service account exist."
+	else
+		# Create service account in default namespace with cluster admin role (for ease of use)
+		echo "Creating service account [${SVC_ACCOUNT}] in default namespacewith cluster admin role..."
+		kubectl create serviceaccount ${SVC_ACCOUNT} -n default 
+		(( $? )) && abort "Failed to create service account"
+		sleep 2
+		kubectl create clusterrolebinding dashboard-admin \
+			-n default \
+			--clusterrole=cluster-admin \
+			--serviceaccount=default:${SVC_ACCOUNT} 
+		(( $? )) && abort "Failed to assigne cluster role to service account [${SVC_ACCOUNT}]"
+		sleep 2
+	fi
 	# Generate dashboard login "kubeconfig" file
 	echo "Generating dashboard login kubeconfig file: ${KUBECONFIG_FILE} ..."
 	SVC_ACCOUNT_SECRET_NAME=$(kubectl get serviceaccount ${SVC_ACCOUNT} -n default -o jsonpath='{.secrets[0].name}')
