@@ -40,13 +40,13 @@ findUnusedPort() {
 
 killExistingExposedPort() {
 	local dashboardFile=${1// /}
-	[[ -z ${dashboardFile} && -f ${dashboardFile} ]] && return 0
+	[[ -z ${dashboardFile} || ! -f ${dashboardFile} ]] && return 0
 	existingExposedPort=$(cat ${dashboardFile} | grep $(getHostIP) | sed -r 's/.*:([[:digit:]]+).*/\1/')
 	if [[ -z ${existingExposedPort} ]]; then
 		existingExposedPort=$(cat ${dashboardFile} | grep "127.0.0.1" | sed -r 's/.*:([[:digit:]]+).*/\1/')
 		[[ -z ${existingExposedPort} ]] && return 0
 	fi
-	existingProcessId=$(netstat -antp 2> /dev/null | awk '/'$existingExposedPort'/ && /kubectl/ {print $7}' | uniq | sed -r 's/([[:digit:]]+).*/\1/')
+	existingProcessId=$(netstat -antp 2> /dev/null | awk '/'"$existingExposedPort"'/ && /kubectl/ {print $7}' | uniq | sed -r 's/([[:digit:]]+).*/\1/')
 	[[ -z ${existingProcessId// /} ]] && return 0
 	kill -9 ${existingProcessId}
 	(( $? )) && abort "Failed to kill existing dashboard exposed port" 
@@ -85,8 +85,9 @@ setupDashboard() {
 	readonly CLUSTER_NAME=${clusterName:-kind}
 	readonly CTX_NAME="kind-${clusterName:-kind}"
 	readonly KUBECONFIG_FILE="${DATA_DIR}/${CTX_NAME}.kubeconfig" 
+	readonly DASHBOARD_INFO="$DATA_DIR/${CTX_NAME}.dashboard.info"
+	readonly DASHBOARD_FILE="${DATA_DIR}/${CTX_NAME}.dashboard.status"
 	readonly DASHBOARD_PORT="${dashboardPort}"
-	readonly DASHBOARD_FILE="${DATA_DIR}/${CTX_NAME}.dashboard"
 
 	# Set up dashboard 
 	echo ""
@@ -96,8 +97,9 @@ setupDashboard() {
 	echo "  Cluster context          : ${CTX_NAME}"
 	echo "  Dashboard service account: ${SVC_ACCOUNT}"
 	echo "  Kube config file         : ${KUBECONFIG_FILE}" 
-	echo "  Dashboard port           : ${DASHBOARD_PORT}"
+	echo "  Dashboard info file      : ${DASHBOARD_INFO}"
 	echo "  Dashboard status file    : ${DASHBOARD_FILE}"
+	echo "  Dashboard port           : ${DASHBOARD_PORT}"
 	echo "" 
 	if ( ! $(createDirectory ${DATA_DIR}) ); then
 		abort "Failed to create kubeconfig directory [${DATA_DIR}] to store kubeconfig files"
@@ -173,6 +175,16 @@ setupDashboard() {
 		service/kubernetes-dashboard \
 		$DASHBOARD_PORT:443 > ${DASHBOARD_FILE} 2>&1  &
 	(( $? )) && abort "Failed to setup remote access to dashboard"
+
+	cat <<- EOF > ${DASHBOARD_INFO}
+	Cluster name             : ${CLUSTER_NAME}"
+	Cluster context          : ${CTX_NAME}"
+	Dashboard service account: ${SVC_ACCOUNT}"
+	Kube config file         : ${KUBECONFIG_FILE}" 
+	Dashboard port           : ${DASHBOARD_PORT}"
+	Dashboard status file    : ${DASHBOARD_FILE}"
+	EOF
+
 	echo "Succesfully setup kubernetes dashboard"
 	echo "Dashboard URL: https://[$HOST_IP | localhost]:$DASHBOARD_PORT"
 	echo "Dashboard login token: $TOKEN"
