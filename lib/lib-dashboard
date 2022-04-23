@@ -55,7 +55,7 @@ killExistingExposedPort() {
 dashboardHelp() {
 	echo ""
 	echo "Usage: "
-	echo "  kindctl dashboard setup [-n cluster-name] [-s service-account-name] [-p dashboard-port]"
+	echo "  kindctl dashboard setup [-n cluster-name] [-p dashboard-port]"
 	echo "  kindctl dashboard remove [-n cluster-name]"
 	echo "  kindctl dashboard help"
 	echo ""
@@ -69,9 +69,8 @@ setupDashboard() {
 	local svcAccount=""
 	local clusterName="" 
 	echo ""
-	while getopts "n:s:p:h" opt ${@}; do
+	while getopts "n:p:h" opt ${@}; do
 		case ${opt} in
-			s) svcAccount=${OPTARG} ;; 
 			n) clusterName=${OPTARG} ;; 
 			p) dashboardPort=${OPTARG} ;; 
 			h) dashboardHelp && exit 0 ;;
@@ -81,7 +80,7 @@ setupDashboard() {
 	dashboardPort=${dashboardPort:-0}
 	(( $dashboardPort == 0 )) && dashboardPort=$(findUnusedPort)
 	readonly HOST_IP=$(getHostIP) 
-	readonly SVC_ACCOUNT=${svcAccount:-dashboard-admin}
+	readonly SVC_ACCOUNT="dashboard-admin"
 	readonly CLUSTER_NAME=${clusterName:-kind}
 	readonly CTX_NAME="kind-${clusterName:-kind}"
 	readonly KUBECONFIG_FILE="${DATA_DIR}/${CTX_NAME}.kubeconfig" 
@@ -186,17 +185,63 @@ setupDashboard() {
 	EOF
 
 	echo "Succesfully setup kubernetes dashboard"
+	echo ""
 	echo "Dashboard URL: https://[$HOST_IP | localhost]:$DASHBOARD_PORT"
-	echo "Dashboard login token: $TOKEN"
+	echo ""
+	echo "Dashboard login token: "
+	echo "$TOKEN"
 	echo ""
 }
 
 removeDashboard() { 
 	source config/dashboard.conf 
-	echo "Removing dashboard..."
-	kubectl delete -f ${DASHBOARD_SETUP_YAML_URL}
-	(( $? )) && abort  "Failed to remove dashboard"
-	echo "Successfully removed dashboard"
+	local svcAccount=""
+	local clusterName="" 
+	echo ""
+	while getopts "n:h" opt ${@}; do
+		case ${opt} in
+			n) clusterName=${OPTARG} ;; 
+			h) dashboardHelp && exit 0 ;;
+			*) echo "Invalid option ${opt}" && exit 1;; 
+		esac
+	done
+	readonly SVC_ACCOUNT="dashboard-admin"
+	readonly CLUSTER_NAME=${clusterName:-kind}
+	readonly CTX_NAME="kind-${clusterName:-kind}"
+	readonly KUBECONFIG_FILE="${DATA_DIR}/${CTX_NAME}.kubeconfig" 
+	readonly DASHBOARD_INFO="$DATA_DIR/${CTX_NAME}.dashboard.info"
+	readonly DASHBOARD_FILE="${DATA_DIR}/${CTX_NAME}.dashboard.status" 
+
+	cat <<- EOF
+	Removing dashboard..."
+	
+	  Cluster name             : ${CLUSTER_NAME}"
+	  Cluster context          : ${CTX_NAME}"
+	  Dashboard service account: ${SVC_ACCOUNT}"
+	  Kube config file         : ${KUBECONFIG_FILE}" 
+	  Dashboard info file      : ${DASHBOARD_INFO}"
+	  Dashboard status file    : ${DASHBOARD_FILE}"
+	 
+	EOF
+	if (( $(isDashboardAppRunning) )); then
+		killExistingExposedPort
+		kubectl delete -f ${DASHBOARD_SETUP_YAML_URL}
+		(( $? )) && abort  "Failed to remove dashboard"
+		echo "Successfully removed dashboard deployment"
+		echo "Removing cluster role binding..."
+		kubectl delete clusterrolebinding dashboard-admin 
+		if (( $? )); then
+			echo "Failed to remove cluster role binding"
+		else
+			echo "Successfully remove cluster role binding"
+		fi
+		echo "Removing service account..."
+		kubectl delete serviceaccount ${SVC_ACCOUNT} -n default 
+		(( $? )) && abort "Failed to remove service account [${SVC_ACCOUNT}]"
+		echo "Successfully removed service account [${SVC_ACCOUNT}]"
+	else
+		echo "Dashboard is not running."
+	fi
 }
 
 #::END:: 
