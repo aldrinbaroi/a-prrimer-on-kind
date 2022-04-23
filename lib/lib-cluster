@@ -14,6 +14,15 @@ isClusterExist() {
 	fi 
 }
 
+clusterHelp() {
+	echo ""
+	echo "Usage: "
+	echo "  create-cluster [-c config-YAML-file] [-n cluster-name]"
+	echo ""
+	echo "  If no options are provided then default kind cluster is created"
+	echo ""
+}
+
 #
 # Create Kubernetes cluster using "kind" 
 #
@@ -27,14 +36,7 @@ createCluster() {
 		case ${opt} in
 			c) configFile=${OPTARG} ;; 
 			n) clusterName=${OPTARG} ;; 
-			h)
-				echo "Usage: "
-				echo "        create-cluster [-c config-YAML-file] [-n cluster-name]"
-				echo ""
-				echo "        If no options are provided then default kind cluster is created"
-				echo ""
-				exit 0
-				;;
+			h) clusterHelp && exit 0 ;;
 		esac
 	done
 

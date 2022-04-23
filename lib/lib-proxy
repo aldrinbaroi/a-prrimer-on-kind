@@ -3,6 +3,17 @@
 # Start proxy
 # 
 
+proxyHelp() {
+	echo ""
+	echo "Usage: "
+	echo "  start-proxy [-n cluster-name] [-p proxy-port]"
+	echo ""
+	echo "  The default values are:"
+	echo "  cluster-name  : kind"
+	echo "  proxy-port    : RANDOM PORT"
+	echo ""
+}
+
 startProxy() {
 	source config/proxy.conf
 
@@ -18,16 +29,7 @@ startProxy() {
 			n) clusterName=${OPTARG} ;;
 			p) proxyPort=${OPTARG} ;;
 			o) openDashboardInBrowser=${TRUE} ;;
-			h)
-				echo "Usage: "
-				echo "    start-proxy [-n cluster-name] [-p proxy-port]"
-				echo ""
-				echo "    The default values are:"
-				echo "         cluster-name  : kind"
-				echo "         proxy-port    : RANDOM PORT"
-				echo ""
-				exit 0
-				;;
+			h) proxyHelp && exit 0 ;;
 		esac
 	done
 

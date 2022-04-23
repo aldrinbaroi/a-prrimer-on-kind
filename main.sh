@@ -12,19 +12,21 @@ case $category in
 		case $command in
 			create) createCluster $@ ;;
 			delete) deleteCluster $@ ;;
+			help) clusterHelp ;;
 		esac
 		;;
 	dashboard)
 		case $command in
 			setup) setupDashboard $@ ;;
-			remove) removeDashbaord $@ ;;
-			help) dashboardHelp $@ ;;
+			remove) removeDashboard $@ ;;
+			help) dashboardHelp ;;
 		esac
 		;;
 	proxy)
 		case $command in
 			start) startProxy ;;
-			stop) stopProxy;;
+			stop) stopProxy ;;
+			help) proxyHelp ;;
 		esac
 		;; 
 esac

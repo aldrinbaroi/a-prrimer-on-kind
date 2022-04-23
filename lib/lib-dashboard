@@ -57,7 +57,7 @@ dashboardHelp() {
 	echo "Usage: "
 	echo "  kindctl dashboard setup [-n cluster-name] [-s service-account-name] [-p dashboard-port]"
 	echo "  kindctl dashboard remove [-n cluster-name]"
-	echo "  kindctl dashbaord help"
+	echo "  kindctl dashboard help"
 	echo ""
 	echo "  If no options are provided then dashboard is setup in default [kind] cluster"
 	echo "  with service account [dashboard-admin]"
@@ -172,18 +172,19 @@ setupDashboard() {
 		-n kubernetes-dashboard \
 		service/kubernetes-dashboard \
 		$DASHBOARD_PORT:443 > ${DASHBOARD_FILE} 2>&1  &
-	(( $? )) && abort "Failed to setup remote access to dashbaord"
-	echo "Succesfully setup kubernetes dashbaord"
+	(( $? )) && abort "Failed to setup remote access to dashboard"
+	echo "Succesfully setup kubernetes dashboard"
 	echo "Dashboard URL: https://[$HOST_IP | localhost]:$DASHBOARD_PORT"
 	echo "Dashboard login token: $TOKEN"
 	echo ""
 }
 
-removeDashboard() {
+removeDashboard() { 
+	source config/dashboard.conf 
 	echo "Removing dashboard..."
-	kubectl apply -f ${DASHBOARD_SETUP_YAML_URL}
+	kubectl delete -f ${DASHBOARD_SETUP_YAML_URL}
 	(( $? )) && abort  "Failed to remove dashboard"
-	echo "Successfully removed dashbaord"
+	echo "Successfully removed dashboard"
 }
 
 #::END:: 
