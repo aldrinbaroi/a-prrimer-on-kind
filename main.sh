@@ -5,7 +5,7 @@
 
 category=$1
 command=$2
-shift 1
+shift 2
 
 case $category in
 	cluster)

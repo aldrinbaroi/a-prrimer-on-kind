@@ -28,6 +28,7 @@ clusterHelp() {
 #
 
 createCluster() {
+	echo "\$@ = $@"
 	local configFile=""
 	local clusterName="" 
 
