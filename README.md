@@ -1,4 +1,4 @@
-# kind-utils
+# kindctl
 ### Contains utility scripts to make working with "kind" (Kubernetes in Docker) convenient
 
 Kind repository: https://github.com/kubernetes-sigs/kind<br/>
