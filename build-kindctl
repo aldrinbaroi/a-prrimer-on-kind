@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source dependency-manager
+
 echo "#!/bin/bash" > kindctl
 echo " " >> kindctl 
 for fileName in $(ls lib/*); do
