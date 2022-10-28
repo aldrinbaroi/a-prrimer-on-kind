@@ -40,7 +40,7 @@ case $category in
 		      dashboard: dashboard setup|remove|help
 		      proxy:     start|stop|help
                             
-                USAGE
+		USAGE
 esac
 
 
