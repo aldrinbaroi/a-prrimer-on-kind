@@ -54,13 +54,14 @@ killExistingExposedPort() {
 
 dashboardHelp() {
 	echo ""
-	echo "Usage: "
-	echo "  kindctl dashboard setup [-n cluster-name] [-p dashboard-port]"
-	echo "  kindctl dashboard remove [-n cluster-name]"
-	echo "  kindctl dashboard help"
+	echo "  Usage: "
 	echo ""
-	echo "  If no options are provided then dashboard is setup in default [kind] cluster"
-	echo "  with service account [dashboard-admin]"
+	echo "    kindctl dashboard setup [-n cluster-name] [-p dashboard-port]"
+	echo "    kindctl dashboard remove [-n cluster-name]"
+	echo "    kindctl dashboard help"
+	echo ""
+	echo "    If no options are provided then dashboard is setup in default [kind] cluster"
+	echo "    with service account [dashboard-admin]"
 	echo ""
 }
 

@@ -16,10 +16,13 @@ isClusterExist() {
 
 clusterHelp() {
 	echo ""
-	echo "Usage: "
-	echo "  create-cluster [-c config-YAML-file] [-n cluster-name]"
+	echo "  Usage: "
 	echo ""
-	echo "  If no options are provided then default kind cluster is created"
+	echo "    kindctl cluster create [-c config-YAML-file] [-n cluster-name]"
+	echo "    kindctl cluster delete [-n cluster-name]"
+	echo "    kindctl cluster [help]"
+	echo ""
+	echo "    If no options are provided then default kind cluster is created"
 	echo ""
 }
 
@@ -28,7 +31,6 @@ clusterHelp() {
 #
 
 createCluster() {
-	echo "\$@ = $@"
 	local configFile=""
 	local clusterName="" 
 
